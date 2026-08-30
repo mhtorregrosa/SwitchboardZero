@@ -47,7 +47,6 @@ export async function registerWebMCPTools(
     title: 'Inspect the crisis grid',
     description: 'Read the complete current Switchboard Zero simulation state, including damaged lines, district service, available generation, human-locked districts, risk tolerance and pending approvals. Use this before proposing or applying a recovery plan.',
     inputSchema: { type: 'object', properties: {} },
-    annotations: { readOnlyHint: true },
     execute: async () => {
       const next = controller.commit(recordInspection)
       return response(inspectGrid(next))
@@ -70,7 +69,6 @@ export async function registerWebMCPTools(
       },
       required: ['strategy'],
     },
-    annotations: { readOnlyHint: true },
     execute: async (raw) => {
       const strategy = isPlanStrategy(raw.strategy) ? raw.strategy : 'balanced'
       const plan = simulateRecoveryPlan(controller.getState(), strategy)
@@ -81,8 +79,8 @@ export async function registerWebMCPTools(
 
   await document.modelContext.registerTool({
     name: 'apply_safe_switches',
-    title: 'Apply the safe part of a recovery plan',
-    description: 'Execute only low-risk recovery steps from the most recently simulated plan. Any step that disconnects an active district or exceeds the human risk boundary is withheld and returned as blocked instead of being executed.',
+    title: 'Apply actions inside human policy',
+    description: 'Execute only recovery steps from the most recently simulated plan that are inside the current human-defined authority boundary. Any step that would disconnect an active district without permission or exceed the selected risk ceiling is withheld and returned as blocked.',
     inputSchema: {
       type: 'object',
       properties: {
