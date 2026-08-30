@@ -353,6 +353,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .policy-chip span { margin-right: 6px; }
 .policy-chip--active { color: var(--human); border-color: rgba(197, 150, 255, 0.35); background: rgba(197, 150, 255, 0.07); }
+.policy-chip:disabled, .segmented-control button:disabled, .switch-row:has(input:disabled) { cursor: not-allowed; opacity: 0.55; }
 
 .segmented-control { display: grid; grid-template-columns: repeat(3, minmax(70px, 1fr)); border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
 .segmented-control button { min-height: 30px; border: 0; border-right: 1px solid var(--line); background: transparent; color: #74808c; cursor: pointer; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; }
@@ -364,6 +365,42 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .switch { width: 34px; height: 19px; border-radius: 99px; border: 1px solid var(--line-strong); padding: 2px; background: #0a0e14; }
 .switch i { display: block; width: 13px; height: 13px; border-radius: 50%; background: #687481; transition: transform 0.2s, background 0.2s; }
 .switch-row input:checked + .switch i { transform: translateX(15px); background: var(--human); box-shadow: 0 0 9px rgba(197, 150, 255, 0.6); }
+
+.mission-panel { overflow: hidden; position: relative; }
+.mission-panel::before { position: absolute; inset: 0 auto 0 0; width: 2px; content: ""; background: var(--cyan); opacity: 0.75; }
+.mission-panel--excellent::before { background: var(--green); }
+.mission-panel--contained::before { background: var(--blue); }
+.mission-panel--high-risk::before { background: var(--amber); }
+.mission-panel--failed::before { background: var(--red); }
+.phase-badge { display: inline-flex; align-items: center; min-height: 27px; padding: 0 9px; border: 1px solid rgba(66, 217, 208, 0.24); border-radius: 99px; color: var(--cyan); font-size: 8px; font-weight: 760; letter-spacing: 0.1em; }
+.phase-badge--awaiting-human { border-color: rgba(197, 150, 255, 0.3); color: var(--human); }
+.phase-badge--resolved { border-color: rgba(110, 231, 168, 0.3); color: var(--green); }
+.phase-badge--failed { border-color: rgba(255, 101, 109, 0.35); color: var(--red); }
+.mission-objectives { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.mission-objectives li { display: grid; grid-template-columns: 27px 1fr; gap: 8px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); }
+.mission-objectives li > span { color: #596571; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8px; }
+.mission-objectives p { margin: 0; color: #77838f; font-size: 9px; line-height: 1.4; }
+.mission-objectives b { display: inline-block; min-width: 50px; color: #c9d1d8; font-weight: 680; }
+.mission-objectives li.complete > span, .mission-objectives li.complete b { color: var(--green); }
+.deadline-control { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 12px; border: 1px solid rgba(255, 101, 109, 0.17); border-radius: 8px; background: rgba(255, 101, 109, 0.035); }
+.deadline-control > div { display: grid; gap: 3px; }
+.deadline-control b { color: var(--red); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.deadline-control span { color: #697580; font-size: 7px; letter-spacing: 0.13em; }
+.wait-button { min-height: 31px; padding: 0 11px; border: 1px solid rgba(255, 101, 109, 0.28); border-radius: 6px; background: transparent; color: #d48b90; cursor: pointer; font-size: 9px; }
+.wait-button:disabled { border-color: var(--line); color: #596571; cursor: not-allowed; }
+.human-only-note { display: block; margin-top: 10px; color: #65717d; font-size: 8px; line-height: 1.45; }
+.outcome-summary { margin: 15px 0; color: #aab4bd; font-size: 11px; line-height: 1.55; }
+.outcome-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.outcome-metrics > div { display: grid; justify-items: center; gap: 4px; padding: 10px 4px; border: 1px solid var(--line); border-radius: 7px; }
+.outcome-metrics b { color: var(--cyan); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; }
+.outcome-metrics span { color: #65717d; font-size: 6px; letter-spacing: 0.1em; }
+.outcome-highlights { display: grid; gap: 6px; margin: 15px 0; padding: 0; list-style: none; }
+.outcome-highlights li { display: grid; grid-template-columns: 18px 1fr; gap: 6px; color: #929da7; font-size: 9px; }
+.outcome-highlights span { color: var(--green); }
+.decision-summary { padding: 11px; border-left: 2px solid var(--human); background: rgba(197, 150, 255, 0.055); }
+.decision-summary b { color: var(--human); font-size: 7px; letter-spacing: 0.12em; text-transform: uppercase; }
+.decision-summary p { margin: 5px 0 0; color: #9ca7b1; font-size: 9px; line-height: 1.45; }
+.debrief-footnote { margin: 11px 0 0; color: #5f6b77; font-size: 8px; }
 
 .queue-count--active { color: var(--amber); border-color: rgba(255, 191, 88, 0.34); }
 .approval-panel { min-height: 154px; transition: border-color 0.25s, box-shadow 0.25s; }
@@ -385,6 +422,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .strategy-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 17px; }
 .strategy-row button { min-height: 31px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255, 255, 255, 0.018); color: #8e99a5; cursor: pointer; font-size: 9px; }
 .strategy-row button:hover { border-color: rgba(66, 217, 208, 0.35); color: var(--cyan); }
+.strategy-row button:disabled { cursor: not-allowed; opacity: 0.45; }
 .plan-card { margin-top: 15px; padding-top: 16px; border-top: 1px solid var(--line); }
 .plan-card-heading { display: flex; justify-content: space-between; gap: 12px; }
 .plan-id { color: #65717e; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8px; }
@@ -400,6 +438,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .plan-steps small { display: block; margin-top: 2px; color: #687480; font-size: 7px; }
 .plan-steps li.requires-human { border-color: rgba(255, 191, 88, 0.25); }
 .plan-steps li.requires-human > span { color: var(--amber); background: rgba(255, 191, 88, 0.09); }
+.plan-steps li.waiting { opacity: 0.58; }
+.plan-steps li.waiting > span { color: #798590; background: rgba(121, 133, 144, 0.08); }
 .plan-steps li.done { opacity: 0.55; }
 .plan-steps li.done > span { color: var(--green); }
 .primary-button { width: 100%; min-height: 40px; border: 0; border-radius: 7px; background: var(--cyan); color: #061312; cursor: pointer; font-size: 10px; font-weight: 760; }

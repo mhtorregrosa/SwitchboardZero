@@ -1,14 +1,14 @@
 import {
-  advanceSimulation,
-  applySafeSwitches,
+  applyAuthorizedActions,
+  approvalReasons,
   computeMetrics,
   inspectGrid,
   planStrategies,
-  recordInspection,
   recordPlan,
   recoveryActions,
-  requestOverride,
+  requestHumanDecision,
   sensitiveActionIds,
+  simulateDelayImpact,
   simulateRecoveryPlan,
 } from '../domain/simulation'
 import type { ActionId, PlanStrategy, SimulationState } from '../domain/types'
@@ -24,10 +24,6 @@ function isPlanStrategy(value: unknown): value is PlanStrategy {
 
 function isSensitiveAction(value: unknown): value is ActionId {
   return typeof value === 'string' && sensitiveActionIds.includes(value as (typeof sensitiveActionIds)[number])
-}
-
-function response(value: unknown) {
-  return JSON.stringify(value)
 }
 
 export async function registerWebMCPTools(
@@ -47,10 +43,8 @@ export async function registerWebMCPTools(
     title: 'Inspect the crisis grid',
     description: 'Read the complete current Switchboard Zero simulation state, including damaged lines, district service, available generation, human-locked districts, risk tolerance and pending approvals. Use this before proposing or applying a recovery plan.',
     inputSchema: { type: 'object', properties: {} },
-    execute: async () => {
-      const next = controller.commit(recordInspection)
-      return response(inspectGrid(next))
-    },
+    annotations: { readOnlyHint: true },
+    execute: async () => inspectGrid(controller.getState()),
   }, options)
 
   await document.modelContext.registerTool({
@@ -64,7 +58,6 @@ export async function registerWebMCPTools(
           type: 'string',
           enum: [...planStrategies],
           description: 'Recovery objective to simulate.',
-          default: 'balanced',
         },
       },
       required: ['strategy'],
@@ -73,14 +66,14 @@ export async function registerWebMCPTools(
       const strategy = isPlanStrategy(raw.strategy) ? raw.strategy : 'balanced'
       const plan = simulateRecoveryPlan(controller.getState(), strategy)
       const next = controller.commit((state) => recordPlan(state, plan, 'agent'))
-      return response({ plan, currentMetrics: computeMetrics(next), applied: false })
+      return { plan, currentMetrics: computeMetrics(next), applied: false, visibleStateUpdated: true }
     },
   }, options)
 
   await document.modelContext.registerTool({
-    name: 'apply_safe_switches',
-    title: 'Apply actions inside human policy',
-    description: 'Execute only recovery steps from the most recently simulated plan that are inside the current human-defined authority boundary. Any step that would disconnect an active district without permission or exceed the selected risk ceiling is withheld and returned as blocked.',
+    name: 'apply_authorized_actions',
+    title: 'Apply authorized recovery actions',
+    description: 'Execute recovery steps from the most recently simulated plan in order. Stop at the first step outside the current human-defined authority boundary. A later step is never executed past a withheld dependency.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -97,32 +90,35 @@ export async function registerWebMCPTools(
       if (!current.lastPlan || current.lastPlan.id !== planId) {
         throw new Error('Simulate a recovery plan first, then pass its exact planId.')
       }
-      const result = applySafeSwitches(current, current.lastPlan)
+      const result = applyAuthorizedActions(current, current.lastPlan)
       const next = controller.commit(() => result.state)
-      return response({
+      return {
         executed: result.executed.map((id) => ({ id, label: recoveryActions[id].label })),
         blocked: result.blocked.map((id) => ({
           id,
           label: recoveryActions[id].label,
           consequence: recoveryActions[id].consequence,
-          reason: 'human_authorization_required',
+          reasons: approvalReasons(next, id),
         })),
         metrics: computeMetrics(next),
-      })
+        phase: next.phase,
+        outcome: next.outcome,
+        visibleStateUpdated: true,
+      }
     },
   }, options)
 
   await document.modelContext.registerTool({
-    name: 'request_critical_override',
+    name: 'request_human_decision',
     title: 'Request a human decision',
-    description: 'Place one withheld recovery action in the visible human approval queue. This tool never performs the sensitive action. It explains the trade-off and waits for the person to approve or reject it in the control room.',
+    description: 'Place the action that was actually withheld by apply_authorized_actions into the visible human decision queue. The action must belong to the latest plan. This tool explains the trade-off but never approves or performs it.',
     inputSchema: {
       type: 'object',
       properties: {
         actionId: {
           type: 'string',
           enum: [...sensitiveActionIds],
-          description: 'Sensitive action returned as blocked by apply_safe_switches.',
+          description: 'Sensitive action returned as blocked by apply_authorized_actions.',
         },
         reason: {
           type: 'string',
@@ -137,34 +133,36 @@ export async function registerWebMCPTools(
       if (!isSensitiveAction(raw.actionId)) throw new Error('A valid sensitive actionId is required.')
       const reason = typeof raw.reason === 'string' ? raw.reason.trim() : ''
       if (reason.length < 12) throw new Error('Explain the human trade-off in at least 12 characters.')
-      const next = controller.commit((state) => requestOverride(state, raw.actionId as ActionId, reason))
+      const next = controller.commit((state) => requestHumanDecision(state, raw.actionId as ActionId, reason))
       const pending = next.approvalRequests.find(
         (request) => request.actionId === raw.actionId && request.status === 'pending',
       )
-      return response({
+      return {
         status: 'pending_human_authorization',
         request: pending,
         action: recoveryActions[raw.actionId as ActionId],
+        policyReasons: approvalReasons(next, raw.actionId as ActionId),
         instruction: 'Wait for the human operator to approve or reject the visible request.',
-      })
+        visibleStateUpdated: true,
+      }
     },
   }, options)
 
   await document.modelContext.registerTool({
-    name: 'advance_simulation',
-    title: 'Advance the crisis clock',
-    description: 'Advance the deterministic crisis clock by one to ten minutes. If the damaged East Ring has not been isolated before minute eight, the fault cascades into the hospital feed. Use only when the user asks to wait, test consequences or advance the scenario.',
+    name: 'simulate_delay_impact',
+    title: 'Forecast the cost of waiting',
+    description: 'Run a non-destructive counterfactual showing what would happen if the operator waited between one and twelve minutes. This never advances the live exercise clock or changes the grid.',
     inputSchema: {
       type: 'object',
       properties: {
-        minutes: { type: 'integer', minimum: 1, maximum: 10 },
+        minutes: { type: 'integer', minimum: 1, maximum: 12 },
       },
       required: ['minutes'],
     },
+    annotations: { readOnlyHint: true },
     execute: async (raw) => {
       const minutes = typeof raw.minutes === 'number' && Number.isFinite(raw.minutes) ? raw.minutes : 1
-      const next = controller.commit((state) => advanceSimulation(state, minutes))
-      return response({ minute: next.minute, metrics: computeMetrics(next), state: inspectGrid(next) })
+      return simulateDelayImpact(controller.getState(), minutes)
     },
   }, options)
 

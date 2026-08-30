@@ -76,7 +76,7 @@ export function GridMap({ state }: { state: SimulationState }) {
           <rect x="18" y="-5" width="5" height="10" rx="2" className="source-glyph-fill" />
           <path d="M-7 1 L1-10 L0-2 L8-2 L-1 10 L0 2 L-7 2 Z" className="source-glyph" />
           <text y="45" textAnchor="middle" className="node-label">RESERVE</text>
-          <text y="58" textAnchor="middle" className="node-sub">18 MW</text>
+          <text y="58" textAnchor="middle" className="node-sub">24 MW</text>
         </g>
 
         <g className="source source--solar" transform="translate(745 505)">

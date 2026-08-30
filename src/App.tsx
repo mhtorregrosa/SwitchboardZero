@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApprovalPanel } from './components/ApprovalPanel'
 import { AuditTrail } from './components/AuditTrail'
 import { GridMap } from './components/GridMap'
+import { MissionPanel } from './components/MissionPanel'
 import { PlanPanel } from './components/PlanPanel'
 import { PolicyPanel } from './components/PolicyPanel'
 import { Telemetry } from './components/Telemetry'
@@ -30,7 +31,11 @@ export default function App() {
     ).then((cleanup) => {
       if (cancelled) cleanup()
       else unregister = cleanup
-    }).catch(() => !cancelled && setToolsAvailable(false))
+    }).catch((error) => {
+      const detail = error instanceof Error ? `${error.name}: ${error.message}` : JSON.stringify(error)
+      console.error(`WebMCP tool registration failed: ${detail}`)
+      if (!cancelled) setToolsAvailable(false)
+    })
 
     return () => {
       cancelled = true
@@ -38,7 +43,11 @@ export default function App() {
     }
   }, [commit])
 
-  const reset = () => commit(() => createInitialState())
+  const reset = () => {
+    if (window.confirm('Restart the exercise and clear every decision and audit event?')) {
+      commit(() => createInitialState())
+    }
+  }
 
   return (
     <main className="app-shell">
@@ -53,7 +62,7 @@ export default function App() {
         </div>
         <div className="header-actions">
           <span className="simulation-pill"><i />SIMULATION — NO REAL INFRASTRUCTURE</span>
-          <button type="button" className="reset-button" onClick={reset}>Reset scenario</button>
+          <button type="button" className="reset-button" onClick={reset}>Restart exercise</button>
         </div>
       </header>
 
@@ -62,7 +71,7 @@ export default function App() {
           <span className="eyebrow hero-kicker">HUMAN AUTHORITY × AGENT SPEED</span>
           <h1>The agent can optimize.<br /><em>You decide what it may sacrifice.</em></h1>
         </div>
-        <p>A deterministic crisis control room where WebMCP tools stop at a visible human boundary. Every simulation, switch and override shares one auditable state.</p>
+        <p>A deterministic crisis control room where WebMCP tools stop at a visible human boundary. Every simulation, switch and human decision shares one auditable state.</p>
       </section>
 
       <div className="command-layout">
@@ -72,6 +81,7 @@ export default function App() {
           <PolicyPanel state={state} commit={commit} />
         </div>
         <aside className="command-sidebar">
+          <MissionPanel state={state} commit={commit} />
           <ApprovalPanel state={state} commit={commit} />
           <PlanPanel state={state} commit={commit} />
           <AuditTrail state={state} />
@@ -88,9 +98,9 @@ export default function App() {
           {[
             ['inspect_grid', 'READ'],
             ['simulate_recovery_plan', 'SIMULATE'],
-            ['apply_safe_switches', 'ACT / SAFE'],
-            ['request_critical_override', 'REQUEST'],
-            ['advance_simulation', 'TIME'],
+            ['apply_authorized_actions', 'ACT / POLICY'],
+            ['request_human_decision', 'REQUEST'],
+            ['simulate_delay_impact', 'FORECAST'],
           ].map(([name, kind], index) => (
             <div className="tool-row" key={name}><span>0{index + 1}</span><code>{name}</code><b>{kind}</b></div>
           ))}

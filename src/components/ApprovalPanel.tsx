@@ -15,7 +15,7 @@ export function ApprovalPanel({ state, commit }: ApprovalPanelProps) {
       <div className="panel-heading compact-heading">
         <div>
           <span className="eyebrow">DECISION QUEUE</span>
-          <h2 id="approval-title">Human override</h2>
+          <h2 id="approval-title">Human decision</h2>
         </div>
         <span className={`queue-count ${pending.length ? 'queue-count--active' : ''}`}>{pending.length} PENDING</span>
       </div>
@@ -29,7 +29,7 @@ export function ApprovalPanel({ state, commit }: ApprovalPanelProps) {
             <div className="consequence-box"><b>Consequence</b><span>{action.consequence}</span></div>
             <div className="approval-actions">
               <button type="button" className="reject-button" onClick={() => commit((current) => resolveOverride(current, request.id, 'rejected'))}>Reject</button>
-              <button type="button" className="approve-button" onClick={() => commit((current) => resolveOverride(current, request.id, 'approved'))}>Approve & execute</button>
+              <button type="button" className="approve-button" onClick={() => commit((current) => resolveOverride(current, request.id, 'approved'))}>Authorize action</button>
             </div>
           </article>
         )
@@ -37,7 +37,11 @@ export function ApprovalPanel({ state, commit }: ApprovalPanelProps) {
       {!pending.length && (
         <div className="empty-state compact-empty">
           <span>{latestResolved?.status === 'approved' ? '✓' : '◇'}</span>
-          <p>{latestResolved ? `Last request ${latestResolved.status}.` : 'No agent action is waiting for human authority.'}</p>
+          <p>{latestResolved?.status === 'approved' && !state.outcome
+            ? 'Decision applied. The agent may now continue the authorized plan.'
+            : latestResolved
+              ? `Last request ${latestResolved.status}.`
+              : 'No agent action is waiting for human authority.'}</p>
         </div>
       )}
     </section>
