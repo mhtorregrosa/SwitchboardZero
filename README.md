@@ -2,7 +2,7 @@
 
 **A policy-governed human-agent crisis exercise built for the WebMCP Challenge.**
 
-[Live demo](https://mhtorregrosa.github.io/SwitchboardZero/) · [Agent test script](docs/AGENT_TESTS.md)
+[Live demo](https://mhtorregrosa.github.io/SwitchboardZero/) · [Demo video](https://www.youtube.com/watch?v=RTacJj2_SUc) · [Agent test script](docs/AGENT_TESTS.md)
 
 Switchboard Zero is a deterministic training and evaluation sandbox for high-stakes delegation. A fictional municipal grid has eight minutes before a thermal fault reaches the Hospital feed. A browser agent can inspect the incident, forecast the cost of delay, simulate recovery strategies and perform actions inside the operator's policy. When the next dependent action would cross that boundary, the agent must stop and request a visible human decision.
 
