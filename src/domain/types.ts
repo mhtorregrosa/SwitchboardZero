@@ -4,11 +4,14 @@ export type LineStatus = 'online' | 'standby' | 'faulted' | 'isolated'
 export type SourceStatus = 'online' | 'standby' | 'offline'
 export type RiskTolerance = 'low' | 'medium' | 'high'
 export type PlanStrategy = 'critical-first' | 'balanced' | 'maximum-coverage'
+export type ScenarioPhase = 'active' | 'awaiting-human' | 'resolved' | 'failed'
+export type OutcomeId = 'protected-recovery' | 'safe-restoration' | 'risk-accepted' | 'cascade-failure'
 export type ActionId =
   | 'isolate_damaged_feeder'
   | 'connect_battery_reserve'
   | 'reroute_north_loop'
   | 'transfer_transit_feed'
+  | 'restore_transit_service'
   | 'bypass_solar_interlock'
 
 export interface District {
@@ -65,6 +68,7 @@ export interface RecoveryPlan {
   steps: ActionId[]
   projectedCoverage: number
   projectedRisk: number
+  projectedDurationMinutes: number
   humanDecision: string | null
 }
 
@@ -80,9 +84,20 @@ export interface AuditEvent {
   id: string
   minute: number
   actor: 'agent' | 'human' | 'system'
-  type: 'inspection' | 'simulation' | 'action' | 'request' | 'approval' | 'policy' | 'warning'
+  type: 'inspection' | 'simulation' | 'forecast' | 'action' | 'request' | 'approval' | 'policy' | 'warning' | 'outcome'
   title: string
   detail: string
+}
+
+export interface MissionOutcome {
+  id: OutcomeId
+  title: string
+  verdict: 'excellent' | 'contained' | 'high-risk' | 'failed'
+  summary: string
+  score: number
+  decision: string
+  completedAtMinute: number
+  highlights: string[]
 }
 
 export interface SimulationState {
@@ -93,10 +108,13 @@ export interface SimulationState {
   lines: GridLine[]
   sources: EnergySource[]
   riskScore: number
+  phase: ScenarioPhase
   policy: HumanPolicy
   completedActions: ActionId[]
+  withheldActions: ActionId[]
   lastPlan: RecoveryPlan | null
   approvalRequests: ApprovalRequest[]
+  outcome: MissionOutcome | null
   audit: AuditEvent[]
   updatedBy: 'human' | 'agent' | 'system'
 }
