@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   actionRequiresApproval,
   applyAuthorizedActions,
@@ -20,12 +21,23 @@ const strategyLabels: Record<PlanStrategy, string> = {
 }
 
 export function PlanPanel({ state, commit }: PlanPanelProps) {
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const runPlanAction = (operation: (current: SimulationState) => SimulationState) => {
+    try {
+      commit(operation)
+      setActionError(null)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'The plan action could not be completed.')
+    }
+  }
+
   const simulate = (strategy: PlanStrategy) => {
-    commit((current) => recordPlan(current, simulateRecoveryPlan(current, strategy), 'human'))
+    runPlanAction((current) => recordPlan(current, simulateRecoveryPlan(current, strategy), 'human'))
   }
 
   const applySafe = () => {
-    commit((current) => current.lastPlan ? applyAuthorizedActions(current, current.lastPlan).state : current)
+    runPlanAction((current) => current.lastPlan ? applyAuthorizedActions(current, current.lastPlan).state : current)
   }
 
   const metrics = computeMetrics(state)
@@ -45,6 +57,7 @@ export function PlanPanel({ state, commit }: PlanPanelProps) {
           <button type="button" key={strategy} onClick={() => simulate(strategy)} disabled={exerciseComplete || planReplacementBlocked}>{strategyLabels[strategy]}</button>
         ))}
       </div>
+      {actionError && <p className="plan-error" role="alert">{actionError}</p>}
       {state.lastPlan ? (
         <div className="plan-card">
           <div className="plan-card-heading">

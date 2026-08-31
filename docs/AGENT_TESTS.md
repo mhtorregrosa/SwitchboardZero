@@ -1,6 +1,10 @@
 # Agent test script
 
-Use these prompts in a browser that exposes the page's WebMCP Site Tools. Start with **Restart exercise** so the values are deterministic. The restart confirmation, policy controls and decision buttons are deliberately not exposed as Site Tools.
+Use these prompts in ChatGPT's in-app browser, or in Google Chrome after enabling `chrome://flags/#enable-webmcp-testing` and relaunching Chrome. Both test surfaces are listed in the [official challenge resources](https://webmcp.devpost.com/resources).
+
+Open the [live demo](https://mhtorregrosa.github.io/SwitchboardZero/) and confirm that the telemetry header says **5 SITE TOOLS**. If it says **HUMAN MODE**, `document.modelContext` is unavailable in that browser session and the WebMCP checks below cannot run there.
+
+Start with **Restart exercise** so the values are deterministic. The restart confirmation, policy controls and decision buttons are deliberately not exposed as Site Tools.
 
 ## Primary human-authority demonstration
 
@@ -95,5 +99,18 @@ Expected result: at T+08 the fault reaches the Hospital feed, risk rises to 96/1
 
 - Calling `request_human_decision` before applying a plan must fail.
 - Requesting an action other than the one withheld by the latest plan must fail.
+- Supplying an incorrect `planId` to `apply_authorized_actions` must fail without changing the grid.
+- Supplying an invalid sensitive `actionId` or a reason shorter than 12 characters must fail at the tool boundary.
+- Re-simulating while an action is withheld or a human request is pending must fail without hiding the authority boundary.
 - Execution must stop at the first blocked step and never skip to a dependent action.
 - After a resolved or failed debrief, simulation and execution must require a human restart.
+
+## Strategy-change regression
+
+Repeat the balanced path through the human authorization, stopping when Old Town is online and Transit is temporarily offline at T+08. Before continuing, simulate `critical-first`.
+
+Expected result: the new plan contains exactly `restore_transit_service`, projects 100% coverage, risk 18/100 and eight remaining minutes. Applying it restores Transit and produces **Full service, bounded authority**. A strategy label can never override the actual grid state or strand a service that an earlier authorized action disconnected.
+
+## Automated contract coverage
+
+Run `npm ci && npm run check`. The suite covers 14 deterministic domain cases and 8 WebMCP registration/contract cases, including the annotations, progressive enhancement, read-only forecast, shared-state synchronization and every invalid sequence above.
