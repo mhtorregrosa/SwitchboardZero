@@ -95,6 +95,63 @@ describe('Switchboard Zero deterministic engine', () => {
     expect(completed.districts.find(({ id }) => id === 'transit')?.status).toBe('online')
   })
 
+  it('restores Transit and reports the actual outcome even if the strategy changes after approval', () => {
+    const planned = plannedState()
+    const withheld = applyAuthorizedActions(planned, planned.lastPlan!).state
+    const requested = requestHumanDecision(
+      withheld,
+      'transfer_transit_feed',
+      'Restore Old Town while Transit pauses until the protected alternate feed is ready.',
+    )
+    const approved = resolveOverride(requested, 'approval-1', 'approved')
+
+    expect(computeMetrics(approved)).toMatchObject({ coverage: 90, riskScore: 22 })
+    expect(approved.districts.find(({ id }) => id === 'transit')?.status).toBe('offline')
+
+    const recoveryPlan = simulateRecoveryPlan(approved, 'critical-first')
+    expect(recoveryPlan).toMatchObject({
+      steps: ['restore_transit_service'],
+      projectedCoverage: 100,
+      projectedRisk: 18,
+      projectedDurationMinutes: 8,
+      humanDecision: null,
+    })
+
+    const replanned = recordPlan(approved, recoveryPlan)
+    const completed = applyAuthorizedActions(replanned, recoveryPlan).state
+    expect(completed.districts.find(({ id }) => id === 'transit')?.status).toBe('online')
+    expect(completed.phase).toBe('resolved')
+    expect(completed.outcome).toMatchObject({ id: 'safe-restoration', score: 96 })
+  })
+
+  it('cannot replace a plan while an action is withheld at the human boundary', () => {
+    const planned = plannedState()
+    const replacement = simulateRecoveryPlan(planned, 'critical-first')
+    const withheld = applyAuthorizedActions(planned, planned.lastPlan!).state
+
+    expect(() => simulateRecoveryPlan(withheld, 'critical-first')).toThrow(/withheld action workflow/)
+    expect(() => recordPlan(withheld, replacement)).toThrow(/withheld action workflow/)
+    expect(withheld.phase).toBe('awaiting-human')
+    expect(withheld.withheldActions).toEqual(['transfer_transit_feed'])
+    expect(withheld.lastPlan?.id).toBe('plan-balanced-v2')
+  })
+
+  it('does not resolve an exercise from an empty plan', () => {
+    const initial = createInitialState()
+    const emptyPlan = {
+      ...simulateRecoveryPlan(initial, 'critical-first'),
+      steps: [],
+      projectedCoverage: computeMetrics(initial).coverage,
+      projectedRisk: initial.riskScore,
+      projectedDurationMinutes: 0,
+    }
+    const planned = recordPlan(initial, emptyPlan)
+
+    expect(() => applyAuthorizedActions(planned, emptyPlan)).toThrow(/no remaining actions/)
+    expect(planned.phase).toBe('active')
+    expect(planned.outcome).toBeNull()
+  })
+
   it('records a coherent protected outcome when the human rejects the trade-off', () => {
     const planned = plannedState()
     const withheld = applyAuthorizedActions(planned, planned.lastPlan!).state

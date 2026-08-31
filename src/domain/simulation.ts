@@ -282,58 +282,100 @@ export function inspectGrid(state: SimulationState) {
   }
 }
 
-export function simulateRecoveryPlan(state: SimulationState, strategy: PlanStrategy): RecoveryPlan {
+function assertPlanningAllowed(state: SimulationState): void {
   if (state.phase === 'resolved' || state.phase === 'failed') {
     throw new Error('Restart the exercise before simulating another recovery plan.')
   }
   if (state.approvalRequests.some((request) => request.status === 'pending')) {
     throw new Error('Resolve the pending human decision before simulating another plan.')
   }
+  if (state.phase === 'awaiting-human' || state.withheldActions.length > 0) {
+    throw new Error('Finish the withheld action workflow before replacing the current plan.')
+  }
+}
+
+function projectPlanEffects(state: SimulationState, steps: ActionId[]) {
+  let projectedState = state
+  let firstApproval: ActionId | null = null
+
+  for (const actionId of steps) {
+    if (!firstApproval && actionRequiresApproval(projectedState, actionId)) firstApproval = actionId
+    projectedState = executeAction(projectedState, actionId, 'agent')
+  }
+
+  return {
+    metrics: computeMetrics(projectedState),
+    durationMinutes: steps.reduce((total, id) => total + recoveryActions[id].durationMinutes, 0),
+    firstApproval,
+  }
+}
+
+function describeHumanDecision(actionId: ActionId | null): string | null {
+  if (actionId === 'transfer_transit_feed') {
+    return 'Authorize a temporary Transit Hub outage while Old Town is restored and an alternate feed is prepared.'
+  }
+  if (actionId === 'bypass_solar_interlock') {
+    return 'Accept operation above the risk ceiling and expose Water Treatment to an uninspected relay.'
+  }
+  return null
+}
+
+export function simulateRecoveryPlan(state: SimulationState, strategy: PlanStrategy): RecoveryPlan {
+  assertPlanningAllowed(state)
   const baseSteps: ActionId[] = ['isolate_damaged_feeder', 'connect_battery_reserve', 'reroute_north_loop']
   const remainingBase = baseSteps.filter((action) => !state.completedActions.includes(action))
+  const recoveryTail: ActionId[] = state.completedActions.includes('transfer_transit_feed')
+    && !state.completedActions.includes('restore_transit_service')
+    ? ['restore_transit_service']
+    : []
 
   if (strategy === 'critical-first') {
-    const steps = remainingBase
+    const steps = [...remainingBase, ...recoveryTail]
+    const projection = projectPlanEffects(state, steps)
     return {
       id: 'plan-critical-first-v2',
       strategy,
       name: 'Protected recovery',
       rationale: 'Contain the cascade and restore critical services without interrupting any district that is currently online.',
       steps,
-      projectedCoverage: 80,
-      projectedRisk: 24,
-      projectedDurationMinutes: steps.reduce((total, id) => total + recoveryActions[id].durationMinutes, 0),
-      humanDecision: null,
+      projectedCoverage: projection.metrics.coverage,
+      projectedRisk: projection.metrics.riskScore,
+      projectedDurationMinutes: projection.durationMinutes,
+      humanDecision: describeHumanDecision(projection.firstApproval),
     }
   }
 
   const finalActions: ActionId[] = strategy === 'balanced'
     ? ['transfer_transit_feed', 'restore_transit_service']
-    : ['bypass_solar_interlock']
+    : [...recoveryTail, 'bypass_solar_interlock']
   const steps = [
     ...remainingBase,
     ...finalActions.filter((action) => !state.completedActions.includes(action)),
   ]
-  const humanDecision = strategy === 'balanced'
-    ? 'Authorize a temporary Transit Hub outage while Old Town is restored and an alternate feed is prepared.'
-    : 'Accept operation above the risk ceiling and expose Water Treatment to an uninspected relay.'
+  const projection = projectPlanEffects(state, steps)
+  const humanDecision = describeHumanDecision(projection.firstApproval)
 
   return {
     id: `plan-${strategy}-v2`,
     strategy,
     name: strategy === 'balanced' ? 'Balanced restoration' : 'Maximum coverage',
     rationale: strategy === 'balanced'
-      ? 'Restore the safe majority, pause at one explicit service trade-off, then finish on a protected alternate feed.'
-      : 'Reach full service faster by accepting elevated relay risk near a protected service.',
+      ? humanDecision
+        ? 'Restore the safe majority, pause at one explicit service trade-off, then finish on a protected alternate feed.'
+        : 'Restore full service through the transfer path already permitted by the operator\'s current authority boundary.'
+      : humanDecision
+        ? 'Reach full service faster by accepting elevated relay risk near a protected service.'
+        : 'Reach full service through the high-risk path already permitted by the operator\'s current authority boundary.',
     steps,
-    projectedCoverage: 100,
-    projectedRisk: strategy === 'balanced' ? 18 : 56,
-    projectedDurationMinutes: steps.reduce((total, id) => total + recoveryActions[id].durationMinutes, 0),
+    projectedCoverage: projection.metrics.coverage,
+    projectedRisk: projection.metrics.riskScore,
+    projectedDurationMinutes: projection.durationMinutes,
     humanDecision,
   }
 }
 
 export function recordPlan(state: SimulationState, plan: RecoveryPlan, actor: 'agent' | 'human' = 'agent'): SimulationState {
+  assertPlanningAllowed(state)
   return {
     ...state,
     phase: 'active',
@@ -474,18 +516,30 @@ function completeMission(state: SimulationState, id: MissionOutcome['id'], decis
 
 function completePlanIfReady(state: SimulationState, plan: RecoveryPlan): SimulationState {
   if (!plan.steps.every((actionId) => state.completedActions.includes(actionId))) return state
-  if (plan.strategy === 'critical-first') {
-    return completeMission(state, 'protected-recovery', 'No interruption of an online district was authorized.')
+  const metrics = computeMetrics(state)
+  if (metrics.coverage === 100 && state.completedActions.includes('bypass_solar_interlock')) {
+    return completeMission(state, 'risk-accepted', 'The high-risk solar interlock bypass was accepted.')
   }
-  if (plan.strategy === 'balanced') {
+  if (metrics.coverage === 100 && state.completedActions.includes('restore_transit_service')) {
     return completeMission(state, 'safe-restoration', 'The temporary Transit transfer was authorized, then service was restored through the reserve bus.')
   }
-  return completeMission(state, 'risk-accepted', 'The high-risk solar interlock bypass was accepted.')
+  const sensitiveActionCompleted = state.completedActions.includes('transfer_transit_feed')
+    || state.completedActions.includes('bypass_solar_interlock')
+  if (metrics.coverage >= 80 && !sensitiveActionCompleted) {
+    return completeMission(state, 'protected-recovery', 'No interruption of an online district was authorized.')
+  }
+  return state
 }
 
 export function applyAuthorizedActions(state: SimulationState, plan: RecoveryPlan): ActionExecutionResult {
   if (state.phase === 'resolved' || state.phase === 'failed') {
     throw new Error('This exercise is complete. Restart it before applying another plan.')
+  }
+  if (!state.lastPlan || state.lastPlan.id !== plan.id) {
+    throw new Error('Apply only the most recently simulated recovery plan.')
+  }
+  if (plan.steps.length === 0) {
+    throw new Error('This plan has no remaining actions and cannot complete the exercise.')
   }
   let next = state
   const executed: ActionId[] = []

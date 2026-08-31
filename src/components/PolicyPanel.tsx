@@ -12,11 +12,13 @@ const lockableDistricts: DistrictId[] = ['water', 'transit']
 export function PolicyPanel({ state, commit }: PolicyPanelProps) {
   const exerciseComplete = state.phase === 'resolved' || state.phase === 'failed'
   const toggleLock = (districtId: DistrictId) => {
-    const locked = state.policy.lockedDistricts.includes(districtId)
-    const next = locked
-      ? state.policy.lockedDistricts.filter((id) => id !== districtId)
-      : [...state.policy.lockedDistricts, districtId]
-    commit((current) => updateHumanPolicy(current, { lockedDistricts: next }))
+    commit((current) => {
+      const locked = current.policy.lockedDistricts.includes(districtId)
+      const next = locked
+        ? current.policy.lockedDistricts.filter((id) => id !== districtId)
+        : [...current.policy.lockedDistricts, districtId]
+      return updateHumanPolicy(current, { lockedDistricts: next })
+    })
   }
 
   return (

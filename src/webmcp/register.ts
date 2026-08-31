@@ -11,7 +11,7 @@ import {
   simulateDelayImpact,
   simulateRecoveryPlan,
 } from '../domain/simulation'
-import type { ActionId, PlanStrategy, SimulationState } from '../domain/types'
+import type { ActionExecutionResult, ActionId, PlanStrategy, RecoveryPlan, SimulationState } from '../domain/types'
 
 interface StateController {
   getState: () => SimulationState
@@ -64,8 +64,12 @@ export async function registerWebMCPTools(
     },
     execute: async (raw) => {
       const strategy = isPlanStrategy(raw.strategy) ? raw.strategy : 'balanced'
-      const plan = simulateRecoveryPlan(controller.getState(), strategy)
-      const next = controller.commit((state) => recordPlan(state, plan, 'agent'))
+      let plan: RecoveryPlan | undefined
+      const next = controller.commit((state) => {
+        plan = simulateRecoveryPlan(state, strategy)
+        return recordPlan(state, plan, 'agent')
+      })
+      if (!plan) throw new Error('The recovery plan could not be generated.')
       return { plan, currentMetrics: computeMetrics(next), applied: false, visibleStateUpdated: true }
     },
   }, options)
@@ -86,12 +90,15 @@ export async function registerWebMCPTools(
     },
     execute: async (raw) => {
       const planId = typeof raw.planId === 'string' ? raw.planId : ''
-      const current = controller.getState()
-      if (!current.lastPlan || current.lastPlan.id !== planId) {
-        throw new Error('Simulate a recovery plan first, then pass its exact planId.')
-      }
-      const result = applyAuthorizedActions(current, current.lastPlan)
-      const next = controller.commit(() => result.state)
+      let result: ActionExecutionResult | undefined
+      const next = controller.commit((state) => {
+        if (!state.lastPlan || state.lastPlan.id !== planId) {
+          throw new Error('Simulate a recovery plan first, then pass its exact planId.')
+        }
+        result = applyAuthorizedActions(state, state.lastPlan)
+        return result.state
+      })
+      if (!result) throw new Error('The recovery plan could not be applied.')
       return {
         executed: result.executed.map((id) => ({ id, label: recoveryActions[id].label })),
         blocked: result.blocked.map((id) => ({

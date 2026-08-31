@@ -21,18 +21,17 @@ const strategyLabels: Record<PlanStrategy, string> = {
 
 export function PlanPanel({ state, commit }: PlanPanelProps) {
   const simulate = (strategy: PlanStrategy) => {
-    const plan = simulateRecoveryPlan(state, strategy)
-    commit((current) => recordPlan(current, plan, 'human'))
+    commit((current) => recordPlan(current, simulateRecoveryPlan(current, strategy), 'human'))
   }
 
   const applySafe = () => {
-    if (!state.lastPlan) return
-    commit((current) => applyAuthorizedActions(current, current.lastPlan!).state)
+    commit((current) => current.lastPlan ? applyAuthorizedActions(current, current.lastPlan).state : current)
   }
 
   const metrics = computeMetrics(state)
   const exerciseComplete = state.phase === 'resolved' || state.phase === 'failed'
   const pendingDecision = state.approvalRequests.some((request) => request.status === 'pending')
+  const planReplacementBlocked = pendingDecision || state.phase === 'awaiting-human' || state.withheldActions.length > 0
   return (
     <section className="panel plan-panel" aria-labelledby="plan-title">
       <div className="panel-heading compact-heading">
@@ -43,7 +42,7 @@ export function PlanPanel({ state, commit }: PlanPanelProps) {
       </div>
       <div className="strategy-row" aria-label="Recovery strategy">
         {(Object.keys(strategyLabels) as PlanStrategy[]).map((strategy) => (
-          <button type="button" key={strategy} onClick={() => simulate(strategy)} disabled={exerciseComplete || pendingDecision}>{strategyLabels[strategy]}</button>
+          <button type="button" key={strategy} onClick={() => simulate(strategy)} disabled={exerciseComplete || planReplacementBlocked}>{strategyLabels[strategy]}</button>
         ))}
       </div>
       {state.lastPlan ? (
